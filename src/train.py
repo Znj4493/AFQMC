@@ -59,6 +59,7 @@ from utils import (
     save_checkpoint,
     load_checkpoint
 )
+from adversarial import FGM
 
 
 # ============================================
@@ -219,7 +220,7 @@ def create_dataloaders(train_texts1, train_texts2, train_labels,
 # ============================================
 
 def train_epoch(model, train_loader, optimizer, scheduler, criterion,
-                device, scaler=None, accumulation_steps=1):
+                device, scaler=None, accumulation_steps=1, fgm=None):
     """
     训练一个 epoch
 
@@ -301,6 +302,55 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
 
         # 累积总损失（用于计算平均损失）
         total_loss += loss.item() * accumulation_steps
+
+        # ========== 对抗训练（FGM） ==========
+        # 如果启用对抗训练，执行以下4个步骤
+        if fgm is not None:
+            # 步骤1: 在 embedding 层添加对抗扰动
+            # 扰动方向: 沿梯度方向（损失增长最快的方向）
+            # 扰动公式: r = ε * g / ||g||₂
+            fgm.attack()
+
+            # 步骤2: 对抗样本前向传播
+            # 使用被扰动的 embedding 重新计算损失
+            # 这会制造"最难"的样本，强迫模型学习更鲁棒的特征
+            if scaler is not None:
+                # 使用 AMP（自动混合精度）
+                with torch.cuda.amp.autocast():
+                    outputs_adv = model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels
+                    )
+                    loss_adv = outputs_adv.loss
+                    # 梯度累积：损失除以累积步数
+                    if accumulation_steps > 1:
+                        loss_adv = loss_adv / accumulation_steps
+            else:
+                # 不使用 AMP（普通 FP32 训练）
+                outputs_adv = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels
+                )
+                loss_adv = outputs_adv.loss
+                if accumulation_steps > 1:
+                    loss_adv = loss_adv / accumulation_steps
+
+            # 步骤3: 对抗样本反向传播（梯度累积）
+            # 关键：这次反向传播的梯度会累加到步骤B的梯度上
+            # 最终参数更新使用的是：正常样本梯度 + 对抗样本梯度
+            if scaler is not None:
+                scaler.scale(loss_adv).backward()
+            else:
+                loss_adv.backward()
+
+            # 步骤4: 恢复 embedding 原始值
+            # 为什么要恢复？
+            # - 扰动只用于对抗训练，不应该永久改变模型参数
+            # - 参数更新（optimizer.step）基于原始参数位置
+            fgm.restore()
+                        
 
         # ========== 参数更新 ==========
         # 关键点：每 accumulation_steps 步才更新一次参数
@@ -539,6 +589,13 @@ def main():
     if config.USE_AMP and device.type == 'cuda':
         scaler = torch.cuda.amp.GradScaler()
         print("✓ 启用自动混合精度训练（AMP）")
+    
+    # 创建 FGM 对抗训练对象（如果配置中启用）
+    fgm = None
+    if hasattr(config, 'USE_ADVERSARIAL') and config.USE_ADVERSARIAL:
+        fgm = FGM(model, epsilon=getattr(config, 'ADV_EPSILON', 1.0))
+        print(f"✓ 启用 FGM 对抗训练（epsilon={getattr(config, 'ADV_EPSILON', 1.0)}）")
+
 
     # ========== 6. 打印训练配置 ==========
     print("\n" + "=" * 80)
@@ -588,7 +645,8 @@ def main():
             criterion=criterion,
             device=device,
             scaler=scaler,
-            accumulation_steps=config.GRADIENT_ACCUMULATION_STEPS
+            accumulation_steps=config.GRADIENT_ACCUMULATION_STEPS,
+            fgm=fgm
         )
 
         # ========== 验证阶段 ==========
