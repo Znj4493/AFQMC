@@ -1,7 +1,6 @@
 # Python caches
 __pycache__/
 *.pyc
-
 # Local assistant/session artifacts
 .claude/
 .specstory/
