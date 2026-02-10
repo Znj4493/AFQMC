@@ -8,7 +8,7 @@ __version__ = "0.1.0"
 __author__ = "AFQMC Team"
 
 # 导出常用模块，方便使用
-from .data_loader import (
+from .data.data_loader import (
     load_jsonl,
     load_train_data,
     load_test_data,

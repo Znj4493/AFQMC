@@ -15,17 +15,37 @@
 
 ```
 AFQMC/
-├── dataset/              # 数据集
-├── src/                  # 源代码
-│   ├── data_loader.py   # 数据加载模块
-│   ├── model_macbert.py # MacBERT模型（待开发）
-│   └── model_llm.py     # LLM模型（待开发）
-├── config/               # 配置文件
-├── checkpoints/          # 模型保存
-├── results/              # 结果输出
-└── notebooks/            # 数据探索
-    └── eda.py           # 探索性数据分析
-
+├── dataset/                    # 数据集
+├── src/                        # 源代码
+│   ├── models/                 # 模型定义
+│   │   ├── macbert.py         # MacBERT模型
+│   │   ├── llm.py             # LLM模型
+│   │   └── lora_config.py     # LoRA配置
+│   ├── data/                   # 数据加载
+│   │   ├── data_loader.py     # BERT数据加载
+│   │   ├── data_loader_llm.py # LLM数据加载
+│   │   └── data_augmentation.py # 数据增强
+│   ├── training/               # 训练相关
+│   │   ├── bert_train.py      # BERT训练脚本
+│   │   ├── train_lora.py      # LoRA训练脚本
+│   │   ├── loss.py            # 损失函数
+│   │   └── adversarial.py     # 对抗训练
+│   ├── inference/              # 推理相关
+│   │   ├── inference_macbert.py # MacBERT推理
+│   │   └── inference_api.py   # API推理
+│   └── utils/                  # 工具函数
+│       └── utils.py           # 通用工具
+├── scripts/                    # 独立脚本
+│   ├── download_models.py     # 下载模型
+│   ├── calibrate_threshold.py # 阈值校准
+│   ├── compare_results.py     # 结果对比
+│   ├── analyze_disagreements.py # 分歧分析
+│   └── generate_report.py     # 生成报告
+├── config/                     # 配置文件
+├── checkpoints/                # 模型保存
+├── results/                    # 结果输出
+└── notebooks/                  # 数据探索
+    └── eda.py                 # 探索性数据分析
 ```
 
 ## 快速开始
@@ -43,24 +63,29 @@ cd notebooks
 python eda.py
 ```
 
-### 3. 训练模型（开发中）
+### 3. 训练模型
 
 ```bash
-# MacBERT baseline（阶段二）
-python src/train.py
+# MacBERT baseline
+cd src/training
+python bert_train.py
 
-# LoRA微调（阶段四）
-python src/train_lora.py
+# LoRA微调
+cd src/training
+python train_lora.py
 ```
 
-## 当前进度
+### 4. 推理
 
-- [x] 阶段一：环境搭建与数据探索
-- [ ] 阶段二：MacBERT Baseline模型
-- [ ] 阶段三：模型优化与进阶技巧
-- [ ] 阶段四：LLM微调（LoRA）
-- [ ] 阶段五：推理与提交
-- [ ] 阶段六：总结与面试准备
+```bash
+# MacBERT推理
+cd src/inference
+python inference_macbert.py
+
+# API推理
+cd src/inference
+python inference_api.py
+```
 
 ## 数据集信息
 
